@@ -497,11 +497,22 @@
       });
     });
 
+    // 실제 마우스 호버가 가능한 기기(PC)인지 판별. 터치 기기는 false.
+    const canHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
     const reelCards = document.querySelectorAll('#videoTrack .reels-thumb');
 
     reelCards.forEach((card) => {
       const video = card.querySelector('.thumb-video');
       if (!video) return;
+
+      if (!canHover) {
+        // 모바일/터치 기기: 재생버튼 없이 항상 자동재생
+        card.classList.add('is-playing');
+        video.muted = true;
+        video.play().catch((error) => console.log('video play error:', error));
+        return;
+      }
 
       card.addEventListener('mouseenter', async () => {
         try {
@@ -525,6 +536,12 @@
     allCards.forEach((card) => {
       const video = card.querySelector('.thumb-video');
       if (!video) return;
+
+      if (!canHover) {
+        video.muted = true;
+        video.play().catch(() => { });
+        return;
+      }
 
       card.addEventListener('mouseenter', async () => {
         try {
