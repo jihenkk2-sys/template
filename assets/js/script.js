@@ -497,23 +497,34 @@
       });
     });
 
-    // 실제 마우스 호버가 가능한 기기(PC)인지 판별. 터치 기기는 false.
-    const canHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    // 자동재생이 막힌 경우(주로 맥 Safari) 대기열에 넣고, 첫 사용자 인터랙션(클릭/스크롤/터치) 시 한 번에 재생 시도
+    const pendingAutoplay = new Set();
 
-    // 모바일 등 터치 기기용: 영상을 재생하지 않고, 살짝 seek해서 첫 프레임만 정지 이미지처럼 보여줌
-    function showStillFrame(video) {
-      const seekToFirstFrame = () => {
-        try {
-          video.currentTime = 0.01;
-        } catch (e) { }
-      };
+    function resumePendingAutoplay() {
+      pendingAutoplay.forEach((video) => video.play().catch(() => { }));
+      pendingAutoplay.clear();
+    }
 
-      if (video.readyState >= 1) {
-        seekToFirstFrame();
-      } else {
-        video.addEventListener('loadedmetadata', seekToFirstFrame, { once: true });
+    document.addEventListener('click', resumePendingAutoplay, { once: true });
+    document.addEventListener('scroll', resumePendingAutoplay, { once: true });
+    document.addEventListener('touchstart', resumePendingAutoplay, { once: true });
+
+    function safePlay(video) {
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          pendingAutoplay.add(video);
+        });
       }
     }
+
+    // HTML에 autoplay 속성이 붙은 영상(메인 배너 등)은 모바일/데스크톱 관계없이 무조건 자동재생 시도
+    document.querySelectorAll('video[autoplay]').forEach((video) => {
+      safePlay(video);
+    });
+
+    // 실제 마우스 호버가 가능한 기기(PC)인지 판별. 터치 기기는 false.
+    const canHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
     const reelCards = document.querySelectorAll('#videoTrack .reels-thumb');
 
@@ -522,19 +533,17 @@
       if (!video) return;
 
       if (!canHover) {
-        // 모바일/터치 기기: 자동재생하지 않고 정지 이미지로만 노출 (실제 재생은 모달에서)
-        showStillFrame(video);
+        // 모바일/터치 기기: 재생버튼 없이 항상 자동재생 (기존 동작 유지)
+        card.classList.add('is-playing');
+        video.muted = true;
+        safePlay(video);
         return;
       }
 
-      card.addEventListener('mouseenter', async () => {
-        try {
-          card.classList.add('is-playing');
-          video.currentTime = 0;
-          await video.play();
-        } catch (error) {
-          console.log('video play error:', error);
-        }
+      card.addEventListener('mouseenter', () => {
+        card.classList.add('is-playing');
+        video.currentTime = 0;
+        safePlay(video);
       });
 
       card.addEventListener('mouseleave', () => {
@@ -551,16 +560,14 @@
       if (!video) return;
 
       if (!canHover) {
-        // 모바일/터치 기기: 자동재생하지 않고 정지 이미지로만 노출 (실제 재생은 모달에서)
-        showStillFrame(video);
+        video.muted = true;
+        safePlay(video);
         return;
       }
 
-      card.addEventListener('mouseenter', async () => {
-        try {
-          video.currentTime = 0;
-          await video.play();
-        } catch (e) { }
+      card.addEventListener('mouseenter', () => {
+        video.currentTime = 0;
+        safePlay(video);
       });
 
       card.addEventListener('mouseleave', () => {
@@ -568,34 +575,3 @@
         video.currentTime = 0;
       });
     });
-
-    // autoplay 속성이 붙은 영상(메인 배너 등)은 모든 기기에서 무조건 자동재생 시도.
-    // 맥 Safari 등 브라우저 정책으로 막히면, 사용자의 첫 클릭/스크롤/터치 시 이어서 재생.
-    const autoplayVideos = document.querySelectorAll('video[autoplay]');
-
-    if (autoplayVideos.length) {
-      let pendingAutoplayVideos = [];
-
-      const resumePendingAutoplay = () => {
-        pendingAutoplayVideos.forEach((v) => v.play().catch(() => { }));
-        pendingAutoplayVideos = [];
-        document.removeEventListener('click', resumePendingAutoplay);
-        document.removeEventListener('scroll', resumePendingAutoplay);
-        document.removeEventListener('touchstart', resumePendingAutoplay);
-      };
-
-      autoplayVideos.forEach((video) => {
-        const playPromise = video.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(() => {
-            pendingAutoplayVideos.push(video);
-          });
-        }
-      });
-
-      if (pendingAutoplayVideos.length) {
-        document.addEventListener('click', resumePendingAutoplay, { once: true });
-        document.addEventListener('scroll', resumePendingAutoplay, { once: true });
-        document.addEventListener('touchstart', resumePendingAutoplay, { once: true });
-      }
-    }
